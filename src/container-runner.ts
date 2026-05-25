@@ -459,7 +459,17 @@ async function buildContainerArgs(
   const imageTag = containerConfig.imageTag || CONTAINER_IMAGE;
   args.push(imageTag);
 
-  args.push('-c', 'exec bun run /app/src/index.ts');
+  // mnemon persistent-memory setup. The image bakes the binary + an
+  // entrypoint.sh that runs this, but v2 overrides the entrypoint (above) so
+  // entrypoint.sh never executes — run setup here instead, before exec bun.
+  // Guarded on the skill marker so it only runs on the first spawn into a
+  // fresh per-agent-group .claude (idempotent, no per-spawn latency). Output
+  // → stderr; non-fatal (no `set -e`, and `; exec` always runs) so a setup
+  // failure or a future image without mnemon can't block the agent.
+  args.push(
+    '-c',
+    '[ -f /home/node/.claude/skills/mnemon/SKILL.md ] || mnemon setup --target claude-code --yes --global 1>&2; exec bun run /app/src/index.ts',
+  );
 
   return args;
 }
